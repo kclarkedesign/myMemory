@@ -2,6 +2,7 @@ package com.kclarke.mymemory.utils
 
 import com.kclarke.mymemory.R
 
+const val EXTRA_BOARD_SIZE = "EXTRA_BOARD_SIZE"
 val DEFAULT_ICONS = listOf(
         R.drawable.ic_anchor,
         R.drawable.ic_cup,
