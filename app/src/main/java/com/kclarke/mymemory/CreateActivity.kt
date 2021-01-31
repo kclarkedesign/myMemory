@@ -31,10 +31,10 @@ class CreateActivity : AppCompatActivity() {
     private lateinit var etGameName: EditText
     private lateinit var btnSave: Button
 
+    private lateinit var adapter: ImagePickerAdapter
     private lateinit var boardSize: BoardSize
     private var numImagesRequired = -1
     private val chosenImageUris = mutableListOf<Uri>()
-
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,9 +47,9 @@ class CreateActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         boardSize = intent.getSerializableExtra(EXTRA_BOARD_SIZE) as BoardSize
         numImagesRequired = boardSize.getNumPairs()
-        supportActionBar?.title = "Choose picture (0 / $numImagesRequired)"
+        supportActionBar?.title = "Choose pictures (0 / $numImagesRequired)"
 
-        rvImagePicker.adapter = ImagePickerAdapter(this, chosenImageUris, boardSize, object: ImagePickerAdapter.ImageClickListener {
+        adapter = ImagePickerAdapter(this, chosenImageUris, boardSize, object: ImagePickerAdapter.ImageClickListener {
             override fun onPlaceholderClicked() {
                 if ( isPermissionGranted(this@CreateActivity, READ_PHOTOS_PERMISSION)) {
                     launchIntentForPhotos()
@@ -58,6 +58,7 @@ class CreateActivity : AppCompatActivity() {
                 }
             }
         })
+        rvImagePicker.adapter = adapter
         rvImagePicker.setHasFixedSize(true)
         rvImagePicker.layoutManager = GridLayoutManager(this, boardSize.getWidth())
     }
@@ -93,8 +94,22 @@ class CreateActivity : AppCompatActivity() {
             Log.w(TAG, "clipDate numImages ${clipData.itemCount}: $clipData")
             for (i in 0 until clipData.itemCount) {
                 val clipItem = clipData.getItemAt(i)
+                if (chosenImageUris.size < numImagesRequired) {
+                    chosenImageUris.add(clipItem.uri)
+                }
             }
+        } else if (selectedUri != null) {
+            //means the users has at least 1 available square to use
+            Log.i(TAG, "data $selectedUri")
+            chosenImageUris.add(selectedUri)
         }
+        adapter.notifyDataSetChanged()
+        supportActionBar?.title = "Choose pictures (${chosenImageUris.size} / $numImagesRequired)"
+        btnSave.isEnabled = shouldEnableSaveButton()
+    }
+
+    private fun shouldEnableSaveButton(): Boolean {
+
     }
 
     private fun launchIntentForPhotos() {
