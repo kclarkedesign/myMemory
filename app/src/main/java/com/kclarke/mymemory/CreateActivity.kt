@@ -1,6 +1,7 @@
 package com.kclarke.mymemory
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -24,10 +25,7 @@ import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
 import com.kclarke.mymemory.models.BoardSize
-import com.kclarke.mymemory.utils.BitmapScaler
-import com.kclarke.mymemory.utils.EXTRA_BOARD_SIZE
-import com.kclarke.mymemory.utils.isPermissionGranted
-import com.kclarke.mymemory.utils.requestPermission
+import com.kclarke.mymemory.utils.*
 import java.io.ByteArrayOutputStream
 
 class CreateActivity : AppCompatActivity() {
@@ -172,7 +170,25 @@ class CreateActivity : AppCompatActivity() {
     }
 
     private fun handleAllImagesUploaded(gameName: String, imageUrls: MutableList<String>) {
-        //TODO: upload this info to Firestore
+        db.collection("games").document(gameName)
+                .set(mapOf("images" to imageUrls))
+                .addOnCompleteListener{ gameCreationTask ->
+                    if (!gameCreationTask.isSuccessful) {
+                        Log.e(TAG, "Exception with game creation", gameCreationTask.exception)
+                        Toast.makeText(this, "Failed to create game", Toast.LENGTH_SHORT).show()
+                        return@addOnCompleteListener
+                    }
+                    Log.i(TAG, "Success! $gameName was created")
+                    AlertDialog.Builder(this)
+                            .setTitle("Upload completed! Let's play '$gameName'")
+                            .setPositiveButton("OK") {_, _ ->
+                                val resultData = Intent()
+                                resultData.putExtra(EXTRA_GAME_NAME, gameName)
+                                setResult(Activity.RESULT_OK, resultData)
+                                finish()
+                            }.show()
+
+                }
     }
 
     private fun getImageByteArray(photoUri: Uri): ByteArray {
