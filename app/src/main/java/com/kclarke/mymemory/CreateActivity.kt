@@ -16,8 +16,10 @@ import android.text.InputFilter
 import android.text.TextWatcher
 import android.util.Log
 import android.view.MenuItem
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -42,6 +44,7 @@ class CreateActivity : AppCompatActivity() {
     private lateinit var rvImagePicker: RecyclerView
     private lateinit var etGameName: EditText
     private lateinit var btnSave: Button
+    private lateinit var pbUploading: ProgressBar
 
     private lateinit var adapter: ImagePickerAdapter
     private lateinit var boardSize: BoardSize
@@ -57,6 +60,7 @@ class CreateActivity : AppCompatActivity() {
         rvImagePicker = findViewById(R.id.rvImagePicker)
         etGameName = findViewById(R.id.etGameName)
         btnSave = findViewById(R.id.btnSave)
+        pbUploading = findViewById(R.id.pbUploading)
 
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         boardSize = intent.getSerializableExtra(EXTRA_BOARD_SIZE) as BoardSize
@@ -137,35 +141,59 @@ class CreateActivity : AppCompatActivity() {
     }
 
     private fun saveDataToFirebase() {
-        val customGameName = etGameName.text.toString()
+        btnSave.isEnabled = false
         Log.i(TAG, "SaveDataToFirebase")
+        val customGameName = etGameName.text.toString()
+        // prevent overriding existing firebase data
+        db.collection("games").document(customGameName).get().addOnSuccessListener { document ->
+            if (document != null && document.data != null) {
+                AlertDialog.Builder(this)
+                        .setTitle("Game name taken")
+                        .setMessage("A game already exists with the name '$customGameName'. Please choose another")
+                        .setPositiveButton("OK", null)
+                        .show()
+                btnSave.isEnabled = true // re-enable save button on error/failure
+            } else {
+                handleImageUploading(customGameName)
+            }
+        }.addOnFailureListener { exception ->
+            Log.e(TAG, "Error encountered while saving custom memory game", exception)
+            Toast.makeText(this, "Sorry, could not save memory game", Toast.LENGTH_SHORT).show()
+            btnSave.isEnabled = true // re-enable save button on error/failure
+        }
+    }
+
+    private fun handleImageUploading(gameName: String) {
+        pbUploading.visibility = View.VISIBLE
         var didEncounterError = false
         val uploadedImageUrls = mutableListOf<String>()
         for ((index, photoUri) in chosenImageUris.withIndex()) {
             val imageByteArray = getImageByteArray(photoUri)
-            val filePath = "images/$customGameName/${System.currentTimeMillis()}-${index}.jpg"
+            val filePath = "images/$gameName/${System.currentTimeMillis()}-${index}.jpg"
             val photoReference = storage.reference.child(filePath)
             photoReference.putBytes(imageByteArray)
-                .continueWithTask {photoUploadTask ->
-                    Log.i(TAG, "Uploaded bytes: ${photoUploadTask.result?.bytesTransferred}")
-                    photoReference.downloadUrl
-                }.addOnCompleteListener{ downloadUrlTask ->
-                    if (!downloadUrlTask.isSuccessful) {
-                        Log.e(TAG, "Exception with Firebase storage", downloadUrlTask.exception)
-                        Toast.makeText(this, "Image upload failed", Toast.LENGTH_SHORT).show()
-                        didEncounterError = true
-                        return@addOnCompleteListener
+                    .continueWithTask {photoUploadTask ->
+                        Log.i(TAG, "Uploaded bytes: ${photoUploadTask.result?.bytesTransferred}")
+                        photoReference.downloadUrl
+                    }.addOnCompleteListener{ downloadUrlTask ->
+                        if (!downloadUrlTask.isSuccessful) {
+                            Log.e(TAG, "Exception with Firebase storage", downloadUrlTask.exception)
+                            Toast.makeText(this, "Image upload failed", Toast.LENGTH_SHORT).show()
+                            didEncounterError = true
+                            return@addOnCompleteListener
+                        }
+                        if (didEncounterError) {
+                            pbUploading.visibility = View.GONE
+                            return@addOnCompleteListener
+                        }
+                        val downloadUrl = downloadUrlTask.result.toString()
+                        uploadedImageUrls.add(downloadUrl)
+                        pbUploading.progress = uploadedImageUrls.size * 100 / chosenImageUris.size
+                        Log.i(TAG, "Upload of $photoUri finished, num uploaded ${uploadedImageUrls.size}")
+                        if (uploadedImageUrls.size == chosenImageUris.size) {
+                            handleAllImagesUploaded(gameName, uploadedImageUrls)
+                        }
                     }
-                    if (didEncounterError) {
-                        return@addOnCompleteListener
-                    }
-                    val downloadUrl = downloadUrlTask.result.toString()
-                    uploadedImageUrls.add(downloadUrl)
-                    Log.i(TAG, "Upload of $photoUri finished, num uploaded ${uploadedImageUrls.size}")
-                    if (uploadedImageUrls.size == chosenImageUris.size) {
-                        handleAllImagesUploaded(customGameName, uploadedImageUrls)
-                    }
-                }
         }
     }
 
@@ -173,6 +201,7 @@ class CreateActivity : AppCompatActivity() {
         db.collection("games").document(gameName)
                 .set(mapOf("images" to imageUrls))
                 .addOnCompleteListener{ gameCreationTask ->
+                    pbUploading.visibility = View.GONE
                     if (!gameCreationTask.isSuccessful) {
                         Log.e(TAG, "Exception with game creation", gameCreationTask.exception)
                         Toast.makeText(this, "Failed to create game", Toast.LENGTH_SHORT).show()
