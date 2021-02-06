@@ -59,7 +59,7 @@ class MemoryBoardAdapter(
             // choose whether to show custom image or app graphics
             if (memoryCard.isFaceUp) {
                 if (memoryCard.imageUrl != null) {
-                    Picasso.get().load(memoryCard.imageUrl).into(imageButton)
+                    Picasso.get().load(memoryCard.imageUrl).placeholder(R.drawable.ic_image).into(imageButton)
                 } else {
                     imageButton.setImageResource(memoryCard.identifier)
                 }
